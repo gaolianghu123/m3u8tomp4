@@ -13,10 +13,11 @@
   <br>
   <a id="download" style="display:none;">下载 MP4</a>
 
-  <!-- 用 ES 模块方式引入 -->
-  <script type="module">
-    import { createFFmpeg, fetchFile } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js";
+  <!-- 正确引入 UMD 版本 -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
 
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
     const ffmpeg = createFFmpeg({ log: true });
 
     document.getElementById("convertBtn").addEventListener("click", async () => {
@@ -26,7 +27,6 @@
         return;
       }
 
-      // 走你的 Cloudflare Worker 代理
       const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(m3u8Url);
 
       try {
