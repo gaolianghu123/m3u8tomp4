@@ -1,100 +1,64 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>M3U8 转 MP4 在线转换器</title>
-  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
-    input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
-    button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
-    #status { margin: 10px 0; color: #666; }
-    #progress { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; display: none; }
-    #progress-bar { height: 100%; background: #007bff; width: 0%; transition: width 0.3s; }
-    a { display: block; margin-top: 10px; color: #007bff; text-decoration: none; }
-  </style>
+  <title>M3U8 转 MP4</title>
 </head>
 <body>
-  <h1>M3U8 转 MP4 在线转换器</h1>
-  <p>输入 M3U8 URL（原始地址，自动通过 Worker 代理），点击转换。转换后可下载 MP4 文件。</p>
-  <input type="url" id="m3u8Url" placeholder="例如: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" required>
+  <h2>M3U8 转 MP4 下载器</h2>
+  <input type="text" id="m3u8url" placeholder="输入 m3u8 链接" style="width:400px;">
+  <button onclick="startConvert()">开始转换</button>
   <br><br>
-  <button id="convertBtn">开始转换</button>
-  <div id="progress">
-      <div id="progress-bar"></div>
-  </div>
-  <p id="status">就绪 - 支持浏览器端转换，无需上传文件</p>
-  <a id="downloadLink" style="display: none;">下载 MP4 文件</a>
+  <progress id="progress" value="0" max="100" style="width:400px;"></progress>
+  <br>
+  <a id="download" style="display:none;">下载 MP4</a>
+
+  <!-- 关键：引入 FFmpeg WebAssembly 库 -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
 
   <script>
-    // 注意这里是 FFmpegWASM，不是 FFmpeg
-    const { createFFmpeg } = FFmpegWASM;
+    const { createFFmpeg, fetchFile } = FFmpeg;
     const ffmpeg = createFFmpeg({ log: true });
 
-    const WORKER_URL = "https://m3u8tomp4worker.136401367.workers.dev/?url=";
-
-    const statusEl = document.getElementById('status');
-    const convertBtn = document.getElementById('convertBtn');
-    const downloadLink = document.getElementById('downloadLink');
-    const m3u8UrlEl = document.getElementById('m3u8Url');
-    const progressEl = document.getElementById('progress');
-    const progressBarEl = document.getElementById('progress-bar');
-
-    ffmpeg.setProgress(({ ratio }) => {
-      progressBarEl.style.width = `${(ratio * 100).toFixed(2)}%`;
-    });
-
-    convertBtn.addEventListener('click', async () => {
-      const m3u8Url = m3u8UrlEl.value.trim();
+    async function startConvert() {
+      const m3u8Url = document.getElementById("m3u8url").value;
       if (!m3u8Url) {
-        alert('请输入有效的 M3U8 URL');
+        alert("请输入 m3u8 链接");
         return;
       }
 
-      statusEl.textContent = '加载 FFmpeg...';
-      convertBtn.disabled = true;
-      progressEl.style.display = 'block';
-      progressBarEl.style.width = '0%';
-      downloadLink.style.display = 'none';
+      // 你的 Cloudflare Worker 地址
+      const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(m3u8Url);
+
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
 
       try {
-        if (!ffmpeg.isLoaded()) {
-          await ffmpeg.load();
-        }
+        document.getElementById("progress").value = 0;
 
-        statusEl.textContent = '正在转换，请耐心等待...';
+        ffmpeg.setProgress(({ ratio }) => {
+          document.getElementById("progress").value = Math.floor(ratio * 100);
+        });
 
-        // 拼接 Worker 代理地址
-        const proxyUrl = WORKER_URL + encodeURIComponent(m3u8Url);
+        // 执行转换
+        await ffmpeg.run("-i", proxyUrl, "-c", "copy", "-bsf:a", "aac_adtstoasc", "output.mp4");
 
-        // 运行 ffmpeg 转换
-        await ffmpeg.run('-i', proxyUrl, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', 'output.mp4');
-
-        // 读取转换结果
-        const data = await ffmpeg.readFile('output.mp4');
-        const blob = new Blob([data.buffer], { type: 'video/mp4' });
+        // 拿到输出文件
+        const data = ffmpeg.FS("readFile", "output.mp4");
+        const blob = new Blob([data.buffer], { type: "video/mp4" });
         const url = URL.createObjectURL(blob);
 
+        const downloadLink = document.getElementById("download");
         downloadLink.href = url;
-        downloadLink.download = `converted-${Date.now()}.mp4`;
-        downloadLink.textContent = '点击下载 MP4 文件';
-        downloadLink.style.display = 'block';
-        statusEl.textContent = '转换完成！';
-
-      } catch (error) {
-        let msg = error.message || error;
-        if (msg.includes('CORS')) {
-          msg += ' - 需要通过 Worker 代理。';
-        }
-        statusEl.textContent = `转换失败: ${msg}`;
-        console.error(error);
-      } finally {
-        convertBtn.disabled = false;
-        progressEl.style.display = 'none';
+        downloadLink.download = "output.mp4";
+        downloadLink.style.display = "block";
+        downloadLink.innerText = "下载 MP4";
+      } catch (err) {
+        alert("转换失败: " + err.message);
+        console.error(err);
       }
-    });
+    }
   </script>
 </body>
 </html>
