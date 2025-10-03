@@ -166,6 +166,29 @@
             display: block;
             margin-bottom: 5px;
         }
+
+        .alert {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #721c24;
+        }
+
+        .alert strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .alert code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -173,6 +196,15 @@
         <h1>🎬 M3U8 转 MP4</h1>
         <p class="subtitle">浏览器端转换，数据不上传服务器，隐私安全</p>
         
+        <div class="alert" id="corsAlert" style="display: none;">
+            <strong>⚠️ 需要配置 Cloudflare Pages Headers</strong>
+            在仓库根目录创建 <code>_headers</code> 文件，添加以下内容：<br><br>
+            <code>/*</code><br>
+            <code>&nbsp;&nbsp;Cross-Origin-Embedder-Policy: require-corp</code><br>
+            <code>&nbsp;&nbsp;Cross-Origin-Opener-Policy: same-origin</code><br><br>
+            提交后重新部署即可解决 SharedArrayBuffer 错误
+        </div>
+
         <div class="input-group">
             <label for="m3u8Url">M3U8 视频地址</label>
             <input 
@@ -198,7 +230,7 @@
         </a>
         
         <div class="tips">
-            <strong>⚠️ 使用说明：</strong>
+            <strong>💡 使用说明：</strong>
             • 由于浏览器 CORS 限制，只能转换支持跨域访问的 M3U8<br>
             • 测试可用示例已预填，直接点击"开始转换"<br>
             • 首次使用需下载 FFmpeg（约 30MB），请耐心等待<br>
@@ -208,10 +240,6 @@
 
     <script>
         const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ 
-            log: true,
-            corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-        });
         
         const statusEl = document.getElementById('status');
         const convertBtn = document.getElementById('convertBtn');
@@ -219,8 +247,20 @@
         const m3u8UrlEl = document.getElementById('m3u8Url');
         const progressSection = document.getElementById('progressSection');
         const progressFill = document.getElementById('progressFill');
+        const corsAlert = document.getElementById('corsAlert');
         
+        let ffmpeg = null;
         let ffmpegLoaded = false;
+
+        // 检查 SharedArrayBuffer 支持
+        function checkSharedArrayBuffer() {
+            if (typeof SharedArrayBuffer === 'undefined') {
+                corsAlert.style.display = 'block';
+                updateStatus('❌ 需要配置服务器 Headers，请查看上方说明', 'error');
+                return false;
+            }
+            return true;
+        }
 
         // 更新状态
         function updateStatus(message, type = 'info') {
@@ -236,6 +276,11 @@
         }
 
         convertBtn.addEventListener('click', async () => {
+            // 首先检查环境
+            if (!checkSharedArrayBuffer()) {
+                return;
+            }
+
             const m3u8Url = m3u8UrlEl.value.trim();
             
             if (!m3u8Url) {
@@ -249,6 +294,14 @@
             updateProgress(0);
 
             try {
+                // 初始化 FFmpeg
+                if (!ffmpeg) {
+                    ffmpeg = createFFmpeg({ 
+                        log: true,
+                        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                    });
+                }
+
                 // 加载 FFmpeg
                 if (!ffmpegLoaded) {
                     updateStatus('正在加载 FFmpeg（首次约需 30 秒）...');
@@ -313,15 +366,22 @@
                 updateStatus('✅ 转换完成！文件大小：' + (blob.size / 1024 / 1024).toFixed(2) + ' MB', 'success');
                 
                 // 清理
-                ffmpeg.FS('unlink', 'input.m3u8');
-                ffmpeg.FS('unlink', 'output.mp4');
+                try {
+                    ffmpeg.FS('unlink', 'input.m3u8');
+                    ffmpeg.FS('unlink', 'output.mp4');
+                } catch (e) {
+                    // 忽略清理错误
+                }
 
             } catch (error) {
                 console.error('转换错误:', error);
                 
                 let errorMsg = error.message;
-                if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
-                    errorMsg = '❌ 跨域错误：该视频不支持浏览器直接访问，请使用支持 CORS 的 M3U8 地址';
+                if (errorMsg.includes('SharedArrayBuffer')) {
+                    corsAlert.style.display = 'block';
+                    errorMsg = '❌ 需要配置服务器 Headers，请查看上方红色提示';
+                } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
+                    errorMsg = '❌ 跨域错误：该视频不支持浏览器直接访问';
                 } else if (errorMsg.includes('HTTP')) {
                     errorMsg = '❌ 无法访问视频地址，请检查 URL 是否正确';
                 } else {
@@ -331,6 +391,13 @@
                 updateStatus(errorMsg, 'error');
             } finally {
                 convertBtn.disabled = false;
+            }
+        });
+
+        // 页面加载时检查环境
+        window.addEventListener('load', () => {
+            if (!checkSharedArrayBuffer()) {
+                convertBtn.disabled = true;
             }
         });
     </script>
