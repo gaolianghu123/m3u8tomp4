@@ -18,7 +18,7 @@
 </head>
 <body>
   <h1>M3U8 转 MP4 在线转换器</h1>
-  <p>输入 M3U8 URL（需支持 CORS），点击转换。转换后可下载 MP4 文件。</p>
+  <p>输入 M3U8 URL（原始地址，自动通过 Worker 代理），点击转换。转换后可下载 MP4 文件。</p>
   <input type="url" id="m3u8Url" placeholder="例如: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" required>
   <br><br>
   <button id="convertBtn">开始转换</button>
@@ -31,6 +31,9 @@
   <script>
     const { createFFmpeg } = FFmpeg;
     const ffmpeg = createFFmpeg({ log: true });
+
+    const WORKER_URL = "https://m3u8tomp4worker.136401367.workers.dev/?url=";
+
     const statusEl = document.getElementById('status');
     const convertBtn = document.getElementById('convertBtn');
     const downloadLink = document.getElementById('downloadLink');
@@ -62,9 +65,13 @@
 
         statusEl.textContent = '正在转换，请耐心等待...';
 
-        // 直接让 ffmpeg 拉取 m3u8
-        await ffmpeg.run('-i', m3u8Url, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', 'output.mp4');
+        // 拼接 Worker 代理地址
+        const proxyUrl = WORKER_URL + encodeURIComponent(m3u8Url);
 
+        // 运行 ffmpeg 转换
+        await ffmpeg.run('-i', proxyUrl, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', 'output.mp4');
+
+        // 读取转换结果
         const data = await ffmpeg.readFile('output.mp4');
         const blob = new Blob([data.buffer], { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
@@ -78,7 +85,7 @@
       } catch (error) {
         let msg = error.message || error;
         if (msg.includes('CORS')) {
-          msg += ' - 需要源站支持 CORS 或用代理。';
+          msg += ' - 需要通过 Worker 代理。';
         }
         statusEl.textContent = `转换失败: ${msg}`;
         console.error(error);
