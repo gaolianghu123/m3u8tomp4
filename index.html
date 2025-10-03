@@ -2,54 +2,82 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>M3U8 转 MP4 测试（自包含）</title>
+  <title>M3U8 转 MP4 测试（零成本 CDN 版）</title>
 </head>
 <body>
-<h2>测试小视频转换（自包含）</h2>
+<h2>M3U8 转 MP4 测试（零成本 CDN 版）</h2>
+
+<!-- 输入 m3u8 链接 -->
 <input type="text" id="m3u8url" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" style="width:400px;">
 <button id="convertBtn">开始转换</button>
 <br><br>
+
+<!-- 转换进度 -->
 <progress id="progress" value="0" max="100" style="width:400px;"></progress>
 <br>
+
+<!-- 下载链接 -->
 <a id="download" style="display:none;">下载 MP4</a>
+
+<!-- 日志输出 -->
 <pre id="log" style="width:400px;height:200px;overflow:auto;border:1px solid #ccc;"></pre>
 
-<!-- 1️⃣ 引用本地 ffmpeg.min.js -->
-<script src="ffmpeg.min.js"></script>
+<!-- ✅ 使用官方 CDN 引入 FFmpeg UMD 版本 -->
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
 
 <script>
 if (typeof FFmpeg === 'undefined') {
-  alert('FFmpeg 脚本未加载成功，请确认 ffmpeg.min.js 文件在同级目录');
-  throw new Error('FFmpeg 脚本未加载成功');
+  alert('FFmpeg 脚本未加载成功！请检查网络。');
+  throw new Error('FFmpeg 未定义');
 }
 
+// 解构 UMD 全局对象
 const { createFFmpeg, fetchFile } = FFmpeg;
 const ffmpeg = createFFmpeg({ log: true });
 
+// 日志显示
 const logEl = document.getElementById('log');
 ffmpeg.setLogger(({ type, message }) => {
   logEl.textContent += `[${type}] ${message}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 });
 
+// 转换按钮事件
 document.getElementById("convertBtn").addEventListener("click", async () => {
   const url = document.getElementById("m3u8url").value.trim();
+  if (!url) return alert("请输入 m3u8 地址");
+
+  // Cloudflare Worker 代理，解决跨域
   const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(url);
 
   try {
-    if (!ffmpeg.isLoaded()) await ffmpeg.load();
+    logEl.textContent = '';
+    document.getElementById('progress').value = 0;
+    const downloadLink = document.getElementById('download');
+    downloadLink.style.display = 'none';
+
+    if (!ffmpeg.isLoaded()) {
+      logEl.textContent += '加载 FFmpeg...\n';
+      await ffmpeg.load();
+    }
+
     logEl.textContent += '开始转换...\n';
+
+    ffmpeg.setProgress(({ ratio }) => {
+      document.getElementById('progress').value = Math.floor(ratio * 100);
+    });
 
     await ffmpeg.run("-i", proxyUrl, "-c", "copy", "-bsf:a", "aac_adtstoasc", "output.mp4");
 
     const data = ffmpeg.FS("readFile", "output.mp4");
     const blob = new Blob([data.buffer], { type: "video/mp4" });
-    const downloadLink = document.getElementById('download');
+
     downloadLink.href = URL.createObjectURL(blob);
     downloadLink.download = 'output.mp4';
     downloadLink.style.display = 'block';
     downloadLink.innerText = '下载 MP4';
     logEl.textContent += '转换完成！\n';
+
   } catch (err) {
     logEl.textContent += '转换失败: ' + err.message + '\n';
     console.error(err);
