@@ -7,44 +7,45 @@
 <body>
   <h2>M3U8 转 MP4 下载器</h2>
   <input type="text" id="m3u8url" placeholder="输入 m3u8 链接" style="width:400px;">
-  <button onclick="startConvert()">开始转换</button>
+  <button id="convertBtn">开始转换</button>
   <br><br>
   <progress id="progress" value="0" max="100" style="width:400px;"></progress>
   <br>
   <a id="download" style="display:none;">下载 MP4</a>
 
-  <!-- 关键：引入 FFmpeg WebAssembly 库 -->
+  <!-- 必须先引入 FFmpeg 库 -->
   <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
 
   <script>
+    // 创建全局 ffmpeg 实例
     const { createFFmpeg, fetchFile } = FFmpeg;
     const ffmpeg = createFFmpeg({ log: true });
 
-    async function startConvert() {
-      const m3u8Url = document.getElementById("m3u8url").value;
+    document.getElementById("convertBtn").addEventListener("click", async () => {
+      const m3u8Url = document.getElementById("m3u8url").value.trim();
       if (!m3u8Url) {
         alert("请输入 m3u8 链接");
         return;
       }
 
-      // 你的 Cloudflare Worker 地址
+      // 你的 Worker 地址
       const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(m3u8Url);
 
-      if (!ffmpeg.isLoaded()) {
-        await ffmpeg.load();
-      }
-
       try {
+        if (!ffmpeg.isLoaded()) {
+          await ffmpeg.load();
+        }
+
         document.getElementById("progress").value = 0;
 
         ffmpeg.setProgress(({ ratio }) => {
           document.getElementById("progress").value = Math.floor(ratio * 100);
         });
 
-        // 执行转换
+        // 转换
         await ffmpeg.run("-i", proxyUrl, "-c", "copy", "-bsf:a", "aac_adtstoasc", "output.mp4");
 
-        // 拿到输出文件
+        // 生成下载链接
         const data = ffmpeg.FS("readFile", "output.mp4");
         const blob = new Blob([data.buffer], { type: "video/mp4" });
         const url = URL.createObjectURL(blob);
@@ -55,10 +56,10 @@
         downloadLink.style.display = "block";
         downloadLink.innerText = "下载 MP4";
       } catch (err) {
-        alert("转换失败: " + err.message);
         console.error(err);
+        alert("转换失败: " + err.message);
       }
-    }
+    });
   </script>
 </body>
 </html>
