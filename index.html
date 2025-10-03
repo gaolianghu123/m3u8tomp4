@@ -29,7 +29,8 @@
   <a id="downloadLink" style="display: none;">下载 MP4 文件</a>
 
   <script>
-    const { createFFmpeg } = FFmpeg;
+    // 注意这里是 FFmpegWASM，不是 FFmpeg
+    const { createFFmpeg } = FFmpegWASM;
     const ffmpeg = createFFmpeg({ log: true });
 
     const WORKER_URL = "https://m3u8tomp4worker.136401367.workers.dev/?url=";
