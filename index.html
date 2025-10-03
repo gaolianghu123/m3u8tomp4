@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <title>M3U8 转 MP4</title>
@@ -13,12 +13,17 @@
   <br>
   <a id="download" style="display:none;">下载 MP4</a>
 
-  <!-- 必须先引入 FFmpeg 库 -->
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+  <!-- 必须先加载 ffmpeg.min.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
 
   <script>
-    // 创建全局 ffmpeg 实例
-    const { createFFmpeg, fetchFile } = FFmpeg;
+    // 确认 FFmpeg 是否加载成功
+    console.log("FFmpeg object:", window.FFmpeg);
+
+    // 从全局 FFmpeg 里解构出方法
+    const { createFFmpeg, fetchFile } = window.FFmpeg;
+
+    // 创建实例
     const ffmpeg = createFFmpeg({ log: true });
 
     document.getElementById("convertBtn").addEventListener("click", async () => {
@@ -28,7 +33,7 @@
         return;
       }
 
-      // 你的 Worker 地址
+      // 走你的 Worker 代理
       const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(m3u8Url);
 
       try {
@@ -36,16 +41,12 @@
           await ffmpeg.load();
         }
 
-        document.getElementById("progress").value = 0;
-
         ffmpeg.setProgress(({ ratio }) => {
           document.getElementById("progress").value = Math.floor(ratio * 100);
         });
 
-        // 转换
         await ffmpeg.run("-i", proxyUrl, "-c", "copy", "-bsf:a", "aac_adtstoasc", "output.mp4");
 
-        // 生成下载链接
         const data = ffmpeg.FS("readFile", "output.mp4");
         const blob = new Blob([data.buffer], { type: "video/mp4" });
         const url = URL.createObjectURL(blob);
