@@ -2,71 +2,52 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>M3U8 转 MP4 在线转换器</title>
+  <title>M3U8 转 MP4 测试</title>
 </head>
 <body>
-  <h2>M3U8 转 MP4 下载器</h2>
-  <input type="text" id="m3u8url" placeholder="输入 m3u8 链接" style="width:400px;">
-  <button id="convertBtn">开始转换</button>
-  <br><br>
-  <progress id="progress" value="0" max="100" style="width:400px;"></progress>
-  <br>
-  <a id="download" style="display:none;">下载 MP4</a>
-  <pre id="log" style="width:400px;height:200px;overflow:auto;border:1px solid #ccc;"></pre>
+<h2>测试小视频转换</h2>
+<input type="text" id="m3u8url" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" style="width:400px;">
+<button id="convertBtn">开始转换</button>
+<br><br>
+<progress id="progress" value="0" max="100" style="width:400px;"></progress>
+<br>
+<a id="download" style="display:none;">下载 MP4</a>
+<pre id="log" style="width:400px;height:200px;overflow:auto;border:1px solid #ccc;"></pre>
 
-  <!-- 1️⃣ 必须先加载 FFmpeg UMD 脚本 -->
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
+<script>
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({ log: true });
 
-  <script>
-    // 2️⃣ 检查 FFmpeg 是否存在
-    if (typeof FFmpeg === 'undefined') {
-      alert('FFmpeg 脚本未加载成功，请检查 CDN 或网络！');
-      throw new Error('FFmpeg 脚本未加载成功');
-    }
+const logEl = document.getElementById('log');
+ffmpeg.setLogger(({ type, message }) => {
+  logEl.textContent += `[${type}] ${message}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+});
 
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({
-      log: true,
-      progress: ({ ratio }) => {
-        document.getElementById('progress').value = Math.floor(ratio * 100);
-      }
-    });
+document.getElementById("convertBtn").addEventListener("click", async () => {
+  const url = document.getElementById("m3u8url").value.trim();
+  const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(url);
 
-    const logEl = document.getElementById('log');
+  try {
+    if (!ffmpeg.isLoaded()) await ffmpeg.load();
+    logEl.textContent += '开始转换...\n';
 
-    // 捕获 ffmpeg 日志
-    ffmpeg.setLogger(({ type, message }) => {
-      logEl.textContent += `[${type}] ${message}\n`;
-      logEl.scrollTop = logEl.scrollHeight;
-    });
+    await ffmpeg.run("-i", proxyUrl, "-c", "copy", "-bsf:a", "aac_adtstoasc", "output.mp4");
 
-    document.getElementById("convertBtn").addEventListener("click", async () => {
-      const url = document.getElementById("m3u8url").value.trim();
-      if (!url) return alert("请输入 m3u8 地址");
-
-      const proxyUrl = "https://m3u8tomp4worker.136401367.workers.dev/?url=" + encodeURIComponent(url);
-
-      try {
-        if (!ffmpeg.isLoaded()) await ffmpeg.load();
-
-        logEl.textContent += '开始转换...\n';
-
-        await ffmpeg.run("-i", proxyUrl, "-c", "copy", "-bsf:a", "aac_adtstoasc", "output.mp4");
-
-        const data = ffmpeg.FS("readFile", "output.mp4");
-        const blob = new Blob([data.buffer], { type: "video/mp4" });
-        const downloadLink = document.getElementById('download');
-        downloadLink.href = URL.createObjectURL(blob);
-        downloadLink.download = 'output.mp4';
-        downloadLink.style.display = 'block';
-        downloadLink.innerText = '下载 MP4';
-
-        logEl.textContent += '转换完成！\n';
-      } catch (err) {
-        console.error(err);
-        logEl.textContent += '转换失败: ' + err.message + '\n';
-      }
-    });
-  </script>
+    const data = ffmpeg.FS("readFile", "output.mp4");
+    const blob = new Blob([data.buffer], { type: "video/mp4" });
+    const downloadLink = document.getElementById('download');
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = 'output.mp4';
+    downloadLink.style.display = 'block';
+    downloadLink.innerText = '下载 MP4';
+    logEl.textContent += '转换完成！\n';
+  } catch (err) {
+    logEl.textContent += '转换失败: ' + err.message + '\n';
+    console.error(err);
+  }
+});
+</script>
 </body>
 </html>
