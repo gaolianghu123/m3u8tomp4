@@ -2,18 +2,17 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>M3U8 下载测试（零成本）</title>
+  <title>M3U8 TS 下载测试（零成本）</title>
 </head>
 <body>
-<h2>M3U8 下载测试（零成本）</h2>
+<h2>M3U8 TS 下载测试（零成本）</h2>
 
-<p>输入 m3u8 URL（通过 Worker 代理解决跨域）</p>
-<input type="text" id="m3u8url" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" style="width:400px;">
-<button id="downloadBtn">生成下载链接</button>
+<p>点击按钮下载一个视频分片（测试广告/用户操作）</p>
+<button id="downloadBtn">下载 TS 分片</button>
 <br><br>
 
 <!-- 下载链接 -->
-<a id="download" style="display:none;">下载视频</a>
+<a id="download" style="display:none;">点击下载视频分片</a>
 
 <!-- 日志 -->
 <pre id="log" style="width:400px;height:200px;overflow:auto;border:1px solid #ccc;"></pre>
@@ -23,30 +22,33 @@ const logEl = document.getElementById('log');
 const downloadLink = document.getElementById('download');
 
 document.getElementById('downloadBtn').addEventListener('click', async () => {
-  const url = document.getElementById('m3u8url').value.trim();
-  if (!url) return alert('请输入 m3u8 地址');
-
   logEl.textContent = '';
   downloadLink.style.display = 'none';
 
   try {
-    logEl.textContent += '生成下载链接...\n';
+    logEl.textContent += '获取视频分片链接...\n';
 
-    // 使用你的 Cloudflare Worker 代理
-    const proxyUrl = 'https://m3u8tomp4worker.136401367.workers.dev/?url=' + encodeURIComponent(url);
+    // 这里用你自己的 Cloudflare Worker 代理 m3u8
+    // Worker 需要返回第一个 TS 文件的完整 URL
+    const m3u8Url = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+    const proxyUrl = 'https://m3u8tomp4worker.136401367.workers.dev/?url=' + encodeURIComponent(m3u8Url);
 
-    // 测试代理是否可访问
-    const res = await fetch(proxyUrl, { method: 'HEAD' });
-    if (!res.ok) throw new Error('代理无法访问视频');
+    // Worker 返回第一个 TS 分片 URL（假设 Worker 已经解析 m3u8）
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error('Worker 代理无法访问 m3u8');
 
-    downloadLink.href = proxyUrl;
-    downloadLink.download = 'video.m3u8';
+    const tsUrl = await res.text(); // Worker 返回第一个 TS 的 URL
+    logEl.textContent += '分片 URL 获取成功: ' + tsUrl + '\n';
+
+    // 创建下载链接
+    downloadLink.href = tsUrl;
+    downloadLink.download = 'video_segment.ts';
     downloadLink.style.display = 'block';
-    downloadLink.innerText = '点击下载视频';
-    logEl.textContent += '下载链接生成成功！\n';
+    downloadLink.innerText = '点击下载 TS 分片';
+    logEl.textContent += '可以点击下载 TS 分片。\n';
 
   } catch (err) {
-    logEl.textContent += '生成失败: ' + err.message + '\n';
+    logEl.textContent += '获取失败: ' + err.message + '\n';
     console.error(err);
   }
 });
