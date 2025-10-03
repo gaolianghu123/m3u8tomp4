@@ -2,56 +2,54 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>M3U8 TS 下载测试（零成本）</title>
+  <title>M3U8 → MP4 转换（纯前端）</title>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
 </head>
 <body>
-<h2>M3U8 TS 下载测试（零成本）</h2>
-
-<p>点击按钮下载一个视频分片（测试广告/用户操作）</p>
-<button id="downloadBtn">下载 TS 分片</button>
-<br><br>
-
-<!-- 下载链接 -->
-<a id="download" style="display:none;">点击下载视频分片</a>
-
-<!-- 日志 -->
-<pre id="log" style="width:400px;height:200px;overflow:auto;border:1px solid #ccc;"></pre>
+<h2>M3U8 → MP4 在线转换</h2>
+<input type="text" id="url" size="80" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">
+<button id="start">开始转换</button>
+<p id="status"></p>
+<a id="download" style="display:none;">下载 MP4</a>
 
 <script>
-const logEl = document.getElementById('log');
-const downloadLink = document.getElementById('download');
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({ log: true });
 
-document.getElementById('downloadBtn').addEventListener('click', async () => {
-  logEl.textContent = '';
-  downloadLink.style.display = 'none';
+document.getElementById('start').onclick = async () => {
+  const m3u8 = document.getElementById('url').value.trim();
+  const status = document.getElementById('status');
+  const download = document.getElementById('download');
 
   try {
-    logEl.textContent += '获取视频分片链接...\n';
+    status.textContent = '加载 ffmpeg.wasm...';
+    if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
-    // 这里用你自己的 Cloudflare Worker 代理 m3u8
-    // Worker 需要返回第一个 TS 文件的完整 URL
-    const m3u8Url = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
-    const proxyUrl = 'https://m3u8tomp4worker.136401367.workers.dev/?url=' + encodeURIComponent(m3u8Url);
+    status.textContent = '下载 m3u8 文件...';
+    const m3u8Resp = await fetch(m3u8);
+    if (!m3u8Resp.ok) throw new Error('m3u8 获取失败');
+    const m3u8Data = await m3u8Resp.arrayBuffer();
+    ffmpeg.FS('writeFile', 'input.m3u8', new Uint8Array(m3u8Data));
 
-    // Worker 返回第一个 TS 分片 URL（假设 Worker 已经解析 m3u8）
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error('Worker 代理无法访问 m3u8');
+    status.textContent = '开始转换...';
+    await ffmpeg.run('-protocol_whitelist','file,http,https,tcp,tls,crypto','-i','input.m3u8','-c','copy','output.mp4');
 
-    const tsUrl = await res.text(); // Worker 返回第一个 TS 的 URL
-    logEl.textContent += '分片 URL 获取成功: ' + tsUrl + '\n';
+    status.textContent = '读取输出文件...';
+    const data = ffmpeg.FS('readFile','output.mp4');
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
 
-    // 创建下载链接
-    downloadLink.href = tsUrl;
-    downloadLink.download = 'video_segment.ts';
-    downloadLink.style.display = 'block';
-    downloadLink.innerText = '点击下载 TS 分片';
-    logEl.textContent += '可以点击下载 TS 分片。\n';
+    download.href = url;
+    download.download = 'video.mp4';
+    download.textContent = '点击下载 MP4';
+    download.style.display = 'block';
+    status.textContent = '转换完成！';
 
   } catch (err) {
-    logEl.textContent += '获取失败: ' + err.message + '\n';
+    status.textContent = '失败: ' + err.message;
     console.error(err);
   }
-});
+};
 </script>
 </body>
 </html>
