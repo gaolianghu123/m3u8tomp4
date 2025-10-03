@@ -26,7 +26,7 @@
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
             padding: 40px;
         }
@@ -167,27 +167,34 @@
             margin-bottom: 5px;
         }
 
-        .alert {
-            background: #f8d7da;
-            border-left: 4px solid #dc3545;
+        .log-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
             padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            font-size: 13px;
-            color: #721c24;
-        }
-
-        .alert strong {
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        .alert code {
-            background: #fff;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: monospace;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
             font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .log-panel div {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+
+        .log-error {
+            color: #f48771;
+        }
+
+        .log-warning {
+            color: #dcdcaa;
+        }
+
+        .log-info {
+            color: #4ec9b0;
         }
     </style>
 </head>
@@ -195,15 +202,6 @@
     <div class="container">
         <h1>🎬 M3U8 转 MP4</h1>
         <p class="subtitle">浏览器端转换，数据不上传服务器，隐私安全</p>
-        
-        <div class="alert" id="corsAlert" style="display: none;">
-            <strong>⚠️ 需要配置 Cloudflare Pages Headers</strong>
-            在仓库根目录创建 <code>_headers</code> 文件，添加以下内容：<br><br>
-            <code>/*</code><br>
-            <code>&nbsp;&nbsp;Cross-Origin-Embedder-Policy: require-corp</code><br>
-            <code>&nbsp;&nbsp;Cross-Origin-Opener-Policy: same-origin</code><br><br>
-            提交后重新部署即可解决 SharedArrayBuffer 错误
-        </div>
 
         <div class="input-group">
             <label for="m3u8Url">M3U8 视频地址</label>
@@ -228,6 +226,8 @@
         <a class="download-btn" id="downloadLink">
             📥 下载 MP4 文件
         </a>
+
+        <div class="log-panel" id="logPanel"></div>
         
         <div class="tips">
             <strong>💡 使用说明：</strong>
@@ -247,18 +247,29 @@
         const m3u8UrlEl = document.getElementById('m3u8Url');
         const progressSection = document.getElementById('progressSection');
         const progressFill = document.getElementById('progressFill');
-        const corsAlert = document.getElementById('corsAlert');
+        const logPanel = document.getElementById('logPanel');
         
         let ffmpeg = null;
         let ffmpegLoaded = false;
 
+        // 添加日志
+        function addLog(message, type = 'info') {
+            logPanel.style.display = 'block';
+            const div = document.createElement('div');
+            div.className = `log-${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logPanel.appendChild(div);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
         // 检查 SharedArrayBuffer 支持
         function checkSharedArrayBuffer() {
             if (typeof SharedArrayBuffer === 'undefined') {
-                corsAlert.style.display = 'block';
-                updateStatus('❌ 需要配置服务器 Headers，请查看上方说明', 'error');
+                updateStatus('❌ 需要配置服务器 Headers，请检查 _headers 文件', 'error');
+                addLog('SharedArrayBuffer 未定义，需要配置 COOP/COEP headers', 'error');
                 return false;
             }
+            addLog('SharedArrayBuffer 支持正常', 'info');
             return true;
         }
 
@@ -276,7 +287,10 @@
         }
 
         convertBtn.addEventListener('click', async () => {
-            // 首先检查环境
+            // 清空日志
+            logPanel.innerHTML = '';
+            
+            // 检查环境
             if (!checkSharedArrayBuffer()) {
                 return;
             }
@@ -296,50 +310,60 @@
             try {
                 // 初始化 FFmpeg
                 if (!ffmpeg) {
+                    addLog('初始化 FFmpeg 实例', 'info');
                     ffmpeg = createFFmpeg({ 
                         log: true,
                         corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                    });
+
+                    // 监听 FFmpeg 日志
+                    ffmpeg.setLogger(({ type, message }) => {
+                        addLog(`FFmpeg [${type}]: ${message}`, type === 'fferr' ? 'error' : 'info');
                     });
                 }
 
                 // 加载 FFmpeg
                 if (!ffmpegLoaded) {
                     updateStatus('正在加载 FFmpeg（首次约需 30 秒）...');
+                    addLog('开始加载 FFmpeg WASM 模块', 'info');
                     await ffmpeg.load();
                     ffmpegLoaded = true;
+                    addLog('FFmpeg 加载完成', 'info');
                 }
                 updateProgress(20);
 
                 // 下载 M3U8
                 updateStatus('正在下载视频流...');
-                const response = await fetch(m3u8Url);
+                addLog(`正在获取 M3U8: ${m3u8Url}`, 'info');
                 
-                if (!response.ok) {
-                    throw new Error(`无法访问视频：HTTP ${response.status}`);
-                }
+                const m3u8Data = await fetchFile(m3u8Url);
+                addLog(`M3U8 下载完成，大小: ${m3u8Data.length} 字节`, 'info');
                 
-                const m3u8Content = await response.text();
                 updateProgress(40);
-
-                // 检查是否是有效的 M3U8
-                if (!m3u8Content.includes('#EXTM3U')) {
-                    throw new Error('无效的 M3U8 文件格式');
-                }
 
                 // 写入文件
                 updateStatus('正在准备转换...');
-                ffmpeg.FS('writeFile', 'input.m3u8', m3u8Content);
+                addLog('写入 M3U8 文件到虚拟文件系统', 'info');
+                ffmpeg.FS('writeFile', 'input.m3u8', m3u8Data);
+                
+                // 验证文件是否写入成功
+                const files = ffmpeg.FS('readdir', '/');
+                addLog(`虚拟文件系统内容: ${files.join(', ')}`, 'info');
+                
                 updateProgress(50);
 
                 // 转换
                 updateStatus('正在转换（可能需要几分钟）...');
+                addLog('开始 FFmpeg 转换', 'info');
                 
-                // 监听 FFmpeg 日志
+                // 监听进度
                 ffmpeg.setProgress(({ ratio }) => {
                     const percent = Math.min(50 + ratio * 45, 95);
                     updateProgress(percent);
                 });
 
+                // 执行转换 - 使用更通用的参数
+                addLog('执行命令: ffmpeg -i input.m3u8 -c copy -bsf:a aac_adtstoasc output.mp4', 'info');
                 await ffmpeg.run(
                     '-i', 'input.m3u8',
                     '-c', 'copy',
@@ -347,11 +371,22 @@
                     'output.mp4'
                 );
                 
+                addLog('FFmpeg 转换命令执行完成', 'info');
                 updateProgress(95);
+
+                // 检查输出文件
+                const outputFiles = ffmpeg.FS('readdir', '/');
+                addLog(`转换后文件列表: ${outputFiles.join(', ')}`, 'info');
+
+                if (!outputFiles.includes('output.mp4')) {
+                    throw new Error('转换未生成 output.mp4 文件，可能是视频格式不支持或 M3U8 损坏');
+                }
 
                 // 读取结果
                 updateStatus('正在生成下载文件...');
+                addLog('读取输出文件', 'info');
                 const data = ffmpeg.FS('readFile', 'output.mp4');
+                addLog(`输出文件大小: ${data.length} 字节`, 'info');
                 
                 // 创建下载链接
                 const blob = new Blob([data.buffer], { type: 'video/mp4' });
@@ -363,27 +398,33 @@
                 downloadLink.style.display = 'block';
                 
                 updateProgress(100);
-                updateStatus('✅ 转换完成！文件大小：' + (blob.size / 1024 / 1024).toFixed(2) + ' MB', 'success');
+                const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+                updateStatus(`✅ 转换完成！文件大小：${sizeMB} MB`, 'success');
+                addLog(`转换成功！文件: ${filename}, 大小: ${sizeMB} MB`, 'info');
                 
                 // 清理
                 try {
                     ffmpeg.FS('unlink', 'input.m3u8');
                     ffmpeg.FS('unlink', 'output.mp4');
+                    addLog('临时文件已清理', 'info');
                 } catch (e) {
-                    // 忽略清理错误
+                    addLog('清理临时文件时出错（可忽略）', 'warning');
                 }
 
             } catch (error) {
                 console.error('转换错误:', error);
+                addLog(`错误: ${error.message}`, 'error');
+                addLog(`错误堆栈: ${error.stack}`, 'error');
                 
                 let errorMsg = error.message;
                 if (errorMsg.includes('SharedArrayBuffer')) {
-                    corsAlert.style.display = 'block';
-                    errorMsg = '❌ 需要配置服务器 Headers，请查看上方红色提示';
+                    errorMsg = '❌ 需要配置服务器 Headers，请检查 _headers 文件是否正确';
                 } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
                     errorMsg = '❌ 跨域错误：该视频不支持浏览器直接访问';
                 } else if (errorMsg.includes('HTTP')) {
                     errorMsg = '❌ 无法访问视频地址，请检查 URL 是否正确';
+                } else if (errorMsg.includes('readFile')) {
+                    errorMsg = '❌ 转换失败：FFmpeg 未能生成输出文件，可能是视频格式不兼容';
                 } else {
                     errorMsg = '❌ 转换失败：' + errorMsg;
                 }
