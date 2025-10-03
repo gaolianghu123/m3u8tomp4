@@ -2,10 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>M3U8 转 MP4 测试</title>
+  <title>M3U8 转 MP4 测试（自包含）</title>
 </head>
 <body>
-<h2>测试小视频转换</h2>
+<h2>测试小视频转换（自包含）</h2>
 <input type="text" id="m3u8url" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" style="width:400px;">
 <button id="convertBtn">开始转换</button>
 <br><br>
@@ -14,8 +14,15 @@
 <a id="download" style="display:none;">下载 MP4</a>
 <pre id="log" style="width:400px;height:200px;overflow:auto;border:1px solid #ccc;"></pre>
 
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.min.js"></script>
+<!-- 1️⃣ 引用本地 ffmpeg.min.js -->
+<script src="ffmpeg.min.js"></script>
+
 <script>
+if (typeof FFmpeg === 'undefined') {
+  alert('FFmpeg 脚本未加载成功，请确认 ffmpeg.min.js 文件在同级目录');
+  throw new Error('FFmpeg 脚本未加载成功');
+}
+
 const { createFFmpeg, fetchFile } = FFmpeg;
 const ffmpeg = createFFmpeg({ log: true });
 
