@@ -1,55 +1,338 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <title>M3U8 → MP4 转换（纯前端）</title>
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M3U8 转 MP4 在线转换器</title>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        input[type="url"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="url"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress-section {
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .status {
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .status.error {
+            background: #fee;
+            color: #c33;
+        }
+        
+        .status.success {
+            background: #efe;
+            color: #3c3;
+        }
+        
+        .download-btn {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+            padding: 14px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        .download-btn:hover {
+            background: #218838;
+        }
+        
+        .tips {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #856404;
+        }
+        
+        .tips strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
 </head>
 <body>
-<h2>M3U8 → MP4 在线转换</h2>
-<input type="text" id="url" size="80" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">
-<button id="start">开始转换</button>
-<p id="status"></p>
-<a id="download" style="display:none;">下载 MP4</a>
+    <div class="container">
+        <h1>🎬 M3U8 转 MP4</h1>
+        <p class="subtitle">浏览器端转换，数据不上传服务器，隐私安全</p>
+        
+        <div class="input-group">
+            <label for="m3u8Url">M3U8 视频地址</label>
+            <input 
+                type="url" 
+                id="m3u8Url" 
+                placeholder="https://example.com/video.m3u8"
+                value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
+            >
+        </div>
+        
+        <button id="convertBtn">开始转换</button>
+        
+        <div class="progress-section" id="progressSection">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        
+        <div class="status" id="status">准备就绪</div>
+        
+        <a class="download-btn" id="downloadLink">
+            📥 下载 MP4 文件
+        </a>
+        
+        <div class="tips">
+            <strong>⚠️ 使用说明：</strong>
+            • 由于浏览器 CORS 限制，只能转换支持跨域访问的 M3U8<br>
+            • 测试可用示例已预填，直接点击"开始转换"<br>
+            • 首次使用需下载 FFmpeg（约 30MB），请耐心等待<br>
+            • 建议使用 Chrome 或 Edge 浏览器
+        </div>
+    </div>
 
-<script>
-const { createFFmpeg, fetchFile } = FFmpeg;
-const ffmpeg = createFFmpeg({ log: true });
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ 
+            log: true,
+            corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+        });
+        
+        const statusEl = document.getElementById('status');
+        const convertBtn = document.getElementById('convertBtn');
+        const downloadLink = document.getElementById('downloadLink');
+        const m3u8UrlEl = document.getElementById('m3u8Url');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        
+        let ffmpegLoaded = false;
 
-document.getElementById('start').onclick = async () => {
-  const m3u8 = document.getElementById('url').value.trim();
-  const status = document.getElementById('status');
-  const download = document.getElementById('download');
+        // 更新状态
+        function updateStatus(message, type = 'info') {
+            statusEl.textContent = message;
+            statusEl.className = 'status';
+            if (type === 'error') statusEl.classList.add('error');
+            if (type === 'success') statusEl.classList.add('success');
+        }
 
-  try {
-    status.textContent = '加载 ffmpeg.wasm...';
-    if (!ffmpeg.isLoaded()) await ffmpeg.load();
+        // 更新进度
+        function updateProgress(percent) {
+            progressFill.style.width = `${percent}%`;
+        }
 
-    status.textContent = '下载 m3u8 文件...';
-    const m3u8Resp = await fetch(m3u8);
-    if (!m3u8Resp.ok) throw new Error('m3u8 获取失败');
-    const m3u8Data = await m3u8Resp.arrayBuffer();
-    ffmpeg.FS('writeFile', 'input.m3u8', new Uint8Array(m3u8Data));
+        convertBtn.addEventListener('click', async () => {
+            const m3u8Url = m3u8UrlEl.value.trim();
+            
+            if (!m3u8Url) {
+                updateStatus('请输入 M3U8 地址', 'error');
+                return;
+            }
 
-    status.textContent = '开始转换...';
-    await ffmpeg.run('-protocol_whitelist','file,http,https,tcp,tls,crypto','-i','input.m3u8','-c','copy','output.mp4');
+            convertBtn.disabled = true;
+            progressSection.style.display = 'block';
+            downloadLink.style.display = 'none';
+            updateProgress(0);
 
-    status.textContent = '读取输出文件...';
-    const data = ffmpeg.FS('readFile','output.mp4');
-    const blob = new Blob([data.buffer], { type: 'video/mp4' });
-    const url = URL.createObjectURL(blob);
+            try {
+                // 加载 FFmpeg
+                if (!ffmpegLoaded) {
+                    updateStatus('正在加载 FFmpeg（首次约需 30 秒）...');
+                    await ffmpeg.load();
+                    ffmpegLoaded = true;
+                }
+                updateProgress(20);
 
-    download.href = url;
-    download.download = 'video.mp4';
-    download.textContent = '点击下载 MP4';
-    download.style.display = 'block';
-    status.textContent = '转换完成！';
+                // 下载 M3U8
+                updateStatus('正在下载视频流...');
+                const response = await fetch(m3u8Url);
+                
+                if (!response.ok) {
+                    throw new Error(`无法访问视频：HTTP ${response.status}`);
+                }
+                
+                const m3u8Content = await response.text();
+                updateProgress(40);
 
-  } catch (err) {
-    status.textContent = '失败: ' + err.message;
-    console.error(err);
-  }
-};
-</script>
+                // 检查是否是有效的 M3U8
+                if (!m3u8Content.includes('#EXTM3U')) {
+                    throw new Error('无效的 M3U8 文件格式');
+                }
+
+                // 写入文件
+                updateStatus('正在准备转换...');
+                ffmpeg.FS('writeFile', 'input.m3u8', m3u8Content);
+                updateProgress(50);
+
+                // 转换
+                updateStatus('正在转换（可能需要几分钟）...');
+                
+                // 监听 FFmpeg 日志
+                ffmpeg.setProgress(({ ratio }) => {
+                    const percent = Math.min(50 + ratio * 45, 95);
+                    updateProgress(percent);
+                });
+
+                await ffmpeg.run(
+                    '-i', 'input.m3u8',
+                    '-c', 'copy',
+                    '-bsf:a', 'aac_adtstoasc',
+                    'output.mp4'
+                );
+                
+                updateProgress(95);
+
+                // 读取结果
+                updateStatus('正在生成下载文件...');
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+                
+                // 创建下载链接
+                const blob = new Blob([data.buffer], { type: 'video/mp4' });
+                const url = URL.createObjectURL(blob);
+                const filename = `video_${Date.now()}.mp4`;
+                
+                downloadLink.href = url;
+                downloadLink.download = filename;
+                downloadLink.style.display = 'block';
+                
+                updateProgress(100);
+                updateStatus('✅ 转换完成！文件大小：' + (blob.size / 1024 / 1024).toFixed(2) + ' MB', 'success');
+                
+                // 清理
+                ffmpeg.FS('unlink', 'input.m3u8');
+                ffmpeg.FS('unlink', 'output.mp4');
+
+            } catch (error) {
+                console.error('转换错误:', error);
+                
+                let errorMsg = error.message;
+                if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
+                    errorMsg = '❌ 跨域错误：该视频不支持浏览器直接访问，请使用支持 CORS 的 M3U8 地址';
+                } else if (errorMsg.includes('HTTP')) {
+                    errorMsg = '❌ 无法访问视频地址，请检查 URL 是否正确';
+                } else {
+                    errorMsg = '❌ 转换失败：' + errorMsg;
+                }
+                
+                updateStatus(errorMsg, 'error');
+            } finally {
+                convertBtn.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>
